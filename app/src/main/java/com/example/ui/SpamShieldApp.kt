@@ -53,7 +53,11 @@ enum class Screen {
 }
 
 @Composable
-fun SpamShieldApp(viewModel: SpamViewModel) {
+fun SpamShieldApp(
+    viewModel: SpamViewModel,
+    isDarkTheme: Boolean = true,
+    onToggleTheme: () -> Unit = {}
+) {
     val context = LocalContext.current
     var currentScreen by remember { mutableStateOf(Screen.Analyze) }
     val predictState by viewModel.predictUiState.collectAsStateWithLifecycle()
@@ -82,28 +86,30 @@ fun SpamShieldApp(viewModel: SpamViewModel) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(DarkBg)
+                .background(MaterialTheme.colorScheme.background)
                 .drawBehind {
-                    // Accent purple ambient light source at the top
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            colors = listOf(ElectricPurple.copy(alpha = 0.12f), Color.Transparent),
+                    if (isDarkTheme) {
+                        // Accent purple ambient light source at the top
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                colors = listOf(ElectricPurple.copy(alpha = 0.12f), Color.Transparent),
+                                center = Offset(size.width * 0.2f, 0f),
+                                radius = size.width * 0.8f
+                            ),
                             center = Offset(size.width * 0.2f, 0f),
                             radius = size.width * 0.8f
-                        ),
-                        center = Offset(size.width * 0.2f, 0f),
-                        radius = size.width * 0.8f
-                    )
-                    // Accent cyan light source at bottom right
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            colors = listOf(NeonCyan.copy(alpha = 0.08f), Color.Transparent),
+                        )
+                        // Accent cyan light source at bottom right
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                colors = listOf(NeonCyan.copy(alpha = 0.08f), Color.Transparent),
+                                center = Offset(size.width * 0.8f, size.height),
+                                radius = size.width * 0.9f
+                            ),
                             center = Offset(size.width * 0.8f, size.height),
                             radius = size.width * 0.9f
-                        ),
-                        center = Offset(size.width * 0.8f, size.height),
-                        radius = size.width * 0.9f
-                    )
+                        )
+                    }
                 }
                 .padding(innerPadding)
         ) {
@@ -115,6 +121,8 @@ fun SpamShieldApp(viewModel: SpamViewModel) {
                 when (screen) {
                     Screen.Analyze -> AnalyzeScreen(
                         predictState = predictState,
+                        isDarkTheme = isDarkTheme,
+                        onToggleTheme = onToggleTheme,
                         onAnalyze = { emailText ->
                             viewModel.classifyEmail(emailText)
                         },
@@ -153,6 +161,8 @@ fun SpamShieldApp(viewModel: SpamViewModel) {
 @Composable
 fun AnalyzeScreen(
     predictState: PredictUiState,
+    isDarkTheme: Boolean,
+    onToggleTheme: () -> Unit,
     onAnalyze: (String) -> Unit,
     onReset: () -> Unit
 ) {
@@ -173,36 +183,53 @@ fun AnalyzeScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.padding(top = 10.dp, bottom = 24.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
+            Box(
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            Brush.linearGradient(listOf(ElectricPurple, NeonCyan))
-                        ),
-                    contentAlignment = Alignment.Center
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier.align(Alignment.Center)
                 ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Shield,
-                        contentDescription = "Shield Logo",
-                        tint = Color.White,
-                        modifier = Modifier.size(24.dp)
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                Brush.linearGradient(listOf(ElectricPurple, NeonCyan))
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Shield,
+                            contentDescription = "Shield Logo",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = "SpamShield",
+                        style = MaterialTheme.typography.headlineMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.SansSerif,
+                            letterSpacing = 0.5.sp
+                        ),
+                        color = MaterialTheme.colorScheme.onBackground
                     )
                 }
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = "SpamShield",
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.SansSerif,
-                        letterSpacing = 0.5.sp
-                    ),
-                    color = Color.White
-                )
+
+                // Dark / Light Mode Toggle icon button
+                IconButton(
+                    onClick = onToggleTheme,
+                    modifier = Modifier.align(Alignment.CenterEnd)
+                ) {
+                    Icon(
+                        imageVector = if (isDarkTheme) Icons.Rounded.LightMode else Icons.Rounded.DarkMode,
+                        contentDescription = "Toggle Theme",
+                        tint = MaterialTheme.colorScheme.onBackground
+                    )
+                }
             }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
@@ -266,13 +293,13 @@ fun AnalyzeScreen(
                             Text(
                                 text = "Email Content",
                                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                color = TextPrimary
+                                color = MaterialTheme.colorScheme.onBackground
                             )
                             
                             // Paste pill button
                             Card(
                                 shape = RoundedCornerShape(50.dp),
-                                colors = CardDefaults.cardColors(containerColor = DarkSurface),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                                 border = BorderStroke(1.dp, TextMuted.copy(alpha = 0.3f)),
                                 modifier = Modifier
                                     .clickable {
@@ -330,8 +357,8 @@ fun AnalyzeScreen(
                             )
 
                             GlassCard(
-                                borderColor = Color.White.copy(alpha = 0.1f),
-                                backgroundColor = Color(0xCC1A1A1A),
+                                borderColor = if (isDarkTheme) Color.White.copy(alpha = 0.1f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
+                                backgroundColor = if (isDarkTheme) Color(0xCC1A1A1A) else MaterialTheme.colorScheme.surface,
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 TextField(
@@ -355,8 +382,8 @@ fun AnalyzeScreen(
                                         focusedIndicatorColor = Color.Transparent,
                                         unfocusedIndicatorColor = Color.Transparent,
                                         cursorColor = ElectricPurple,
-                                        focusedTextColor = TextPrimary,
-                                        unfocusedTextColor = TextPrimary
+                                        focusedTextColor = MaterialTheme.colorScheme.onBackground,
+                                        unfocusedTextColor = MaterialTheme.colorScheme.onBackground
                                     ),
                                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                                     keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
@@ -364,7 +391,30 @@ fun AnalyzeScreen(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(24.dp))
+                        // Helper buttons for generating Random Spam and Random Ham
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            TextButton(onClick = {
+                                emailInput = "URGENT: Your account has been suspended due to suspicious activities. Please verify your identity immediately by clicking the link to restore access and win a $500 Walmart Gift Card."
+                            }) {
+                                Icon(Icons.Rounded.BugReport, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Random Spam", style = MaterialTheme.typography.labelMedium)
+                            }
+                            TextButton(onClick = {
+                                emailInput = "Hi team, Just a quick reminder that our weekly sync is scheduled for tomorrow at 10 AM. Please make sure to update your status reports before the meeting. Thanks, Sarah"
+                            }) {
+                                Icon(Icons.Rounded.CheckCircleOutline, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Random Ham", style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
 
                         // Large Action Call Button with search icon
                         GradientButton(
@@ -651,7 +701,7 @@ fun VerdictDisplayWidget(
                     Text(
                         text = successResult.emailText,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = TextSecondary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 4,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -701,7 +751,7 @@ fun HistoryScreen(
                 Text(
                     text = "Analysis History",
                     style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                    color = Color.White
+                    color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
                     text = "Last 10 audits cached locally",
@@ -750,7 +800,7 @@ fun HistoryScreen(
                     Text(
                         text = "Clean Threat Registry",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = TextPrimary
+                        color = MaterialTheme.colorScheme.onBackground
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
@@ -796,7 +846,7 @@ fun HistoryItemRow(
 
     GlassCard(
         borderColor = accentColor.copy(alpha = 0.25f),
-        backgroundColor = DarkSurface,
+        backgroundColor = MaterialTheme.colorScheme.surface,
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
@@ -883,7 +933,7 @@ fun HistoryDetailDialog(
     Dialog(onDismissRequest = onDismiss) {
         GlassCard(
             borderColor = accentColor.copy(alpha = 0.5f),
-            backgroundColor = DarkSurface,
+            backgroundColor = MaterialTheme.colorScheme.surface,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 4.dp)
@@ -902,7 +952,7 @@ fun HistoryDetailDialog(
                     Text(
                         text = "Threat Audit Details",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = Color.White
+                        color = MaterialTheme.colorScheme.onBackground
                     )
                     IconButton(
                         onClick = onDismiss,
@@ -1012,7 +1062,7 @@ fun AboutScreen() {
         Text(
             text = "Model Architecture",
             style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-            color = Color.White
+            color = MaterialTheme.colorScheme.onBackground
         )
         Text(
             text = "Computer Science Computerized Classifier Details",
@@ -1024,7 +1074,7 @@ fun AboutScreen() {
         // Project Info Block
         GlassCard(
             borderColor = NeonCyan.copy(alpha = 0.3f),
-            backgroundColor = DarkSurface,
+            backgroundColor = MaterialTheme.colorScheme.surface,
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(18.dp)) {
@@ -1096,7 +1146,7 @@ fun AboutInfographicCard(
 ) {
     GlassCard(
         borderColor = accentColor.copy(alpha = 0.25f),
-        backgroundColor = DarkSurface,
+        backgroundColor = MaterialTheme.colorScheme.surface,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -1148,8 +1198,8 @@ fun AboutInfographicCard(
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
-    borderColor: Color = Color.White.copy(alpha = 0.1f),
-    backgroundColor: Color = Color(0xCC1A1A1A),
+    borderColor: Color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
+    backgroundColor: Color = MaterialTheme.colorScheme.surface,
     content: @Composable () -> Unit
 ) {
     Surface(
@@ -1219,9 +1269,9 @@ fun GlassBottomNavigation(
             .windowInsetsPadding(WindowInsets.navigationBars) // Respect Android Safe gesture bar insets
             .padding(horizontal = 24.dp, vertical = 12.dp)
             .testTag("app_navigation_bar"),
-        color = Color(0xCC1A1A1A),
+        color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(50.dp),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
     ) {
         Row(
             modifier = Modifier
@@ -1263,8 +1313,8 @@ fun BottomNavItem(
     onClick: () -> Unit,
     testTag: String
 ) {
-    val textColor = if (selected) NeonCyan else Color.White.copy(alpha = 0.4f)
-    val iconColor = if (selected) NeonCyan else Color.White.copy(alpha = 0.4f)
+    val textColor = if (selected) NeonCyan else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+    val iconColor = if (selected) NeonCyan else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
 
     Box(
         modifier = Modifier
