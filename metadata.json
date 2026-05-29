@@ -1,0 +1,6 @@
+{
+  "name": "SpamShield",
+  "description": "AI-powered Hybrid Feature Selection Email Spam Classifier",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

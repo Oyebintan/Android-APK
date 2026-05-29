@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Shield outer casing -->
+    <path
+        android:pathData="M54,22 C68,22 79,25 81,29 C81,59 68,81 54,89 C40,81 27,59 27,29 C29,25 40,22 54,22 Z"
+        android:strokeWidth="3"
+        android:strokeColor="#FAFAFA">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="27"
+                android:startY="22"
+                android:endX="81"
+                android:endY="89"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#7C3AED"/>
+                <item android:offset="1.0" android:color="#06B6D4"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Glowing inner lightning bolt -->
+    <path
+        android:pathData="M56,33 L41,49 L51,49 L46,71 L63,47 L53,47 Z"
+        android:strokeWidth="1.2"
+        android:strokeColor="#FFFFFF">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="41"
+                android:startY="33"
+                android:endX="63"
+                android:endY="71"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#7C3AED"/>
+                <item android:offset="0.5" android:color="#FFFFFF"/>
+                <item android:offset="1.0" android:color="#06B6D4"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+</vector>
