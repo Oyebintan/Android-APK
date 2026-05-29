@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.data.ServiceLocator
+import com.example.data.api.MetricResponse
 import com.example.data.local.SpamRecord
 import com.example.data.repository.SpamRepository
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +29,13 @@ sealed interface PredictUiState {
     data class Error(val message: String) : PredictUiState
 }
 
+sealed interface MetricUiState {
+    object Idle : MetricUiState
+    object Loading : MetricUiState
+    data class Success(val response: MetricResponse) : MetricUiState
+    data class Error(val message: String) : MetricUiState
+}
+
 class SpamViewModel(
     application: Application,
     private val repository: SpamRepository
@@ -36,6 +44,15 @@ class SpamViewModel(
     private val _predictUiState = MutableStateFlow<PredictUiState>(PredictUiState.Idle)
     val predictUiState: StateFlow<PredictUiState> = _predictUiState.asStateFlow()
 
+    private val _metricUiState = MutableStateFlow<MetricUiState>(MetricUiState.Idle)
+    val metricUiState: StateFlow<MetricUiState> = _metricUiState.asStateFlow()
+
+    private val _emailInput = MutableStateFlow("")
+    val emailInput: StateFlow<String> = _emailInput.asStateFlow()
+
+    private val _isLoadingSample = MutableStateFlow(false)
+    val isLoadingSample: StateFlow<Boolean> = _isLoadingSample.asStateFlow()
+
     val historyRecords: StateFlow<List<SpamRecord>> = repository.recentRecords
         .stateIn(
             scope = viewModelScope,
@@ -43,8 +60,43 @@ class SpamViewModel(
             initialValue = emptyList()
         )
 
-    fun classifyEmail(emailText: String) {
-        val trimmedText = emailText.trim()
+    fun onEmailInputChanged(newText: String) {
+        _emailInput.value = newText
+    }
+
+    fun fetchRandomSample(label: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isLoadingSample.value = true
+            _predictUiState.value = PredictUiState.Idle // Reset prediction visually
+            try {
+                val res = repository.getRandomSample(label)
+                if (res.text != null) {
+                    _emailInput.value = res.text
+                }
+            } catch (e: Exception) {
+                // Ignore failure for sample to keep it simple, or set error
+            } finally {
+                _isLoadingSample.value = false
+            }
+        }
+    }
+
+    fun fetchMetric(metricKey: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _metricUiState.value = MetricUiState.Loading
+            try {
+                val res = repository.getMetric(metricKey)
+                _metricUiState.value = MetricUiState.Success(res)
+            } catch (e: Exception) {
+                _metricUiState.value = MetricUiState.Error(
+                    e.localizedMessage ?: "Failed to fetch metric."
+                )
+            }
+        }
+    }
+
+    fun classifyEmail() {
+        val trimmedText = _emailInput.value.trim()
         if (trimmedText.isEmpty()) {
             _predictUiState.value = PredictUiState.Error("Email field cannot be empty. Please type or paste email body!")
             return
@@ -56,10 +108,14 @@ class SpamViewModel(
             try {
                 val apiResponse = repository.classifyEmail(trimmedText)
                 
+                val label = apiResponse.label ?: apiResponse.prediction ?: "ham"
+                val spamProb = apiResponse.spam_probability ?: apiResponse.probability ?: 0.0
+                val confidence = apiResponse.confidence ?: (spamProb * 100.0)
+                
                 val record = SpamRecord(
                     emailText = trimmedText,
-                    prediction = apiResponse.prediction.lowercase(),
-                    confidence = apiResponse.confidence,
+                    prediction = label.lowercase(),
+                    confidence = confidence,
                     timestamp = System.currentTimeMillis()
                 )
                 
@@ -69,7 +125,7 @@ class SpamViewModel(
                 _predictUiState.value = PredictUiState.Success(
                     emailText = record.emailText,
                     prediction = record.prediction,
-                    confidence = record.confidence,
+                    confidence = record.confidence, // This will be percentage
                     timestamp = record.timestamp
                 )
             } catch (e: Exception) {

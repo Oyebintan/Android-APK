@@ -120,15 +120,9 @@ fun SpamShieldApp(
             ) { screen ->
                 when (screen) {
                     Screen.Analyze -> AnalyzeScreen(
-                        predictState = predictState,
+                        viewModel = viewModel,
                         isDarkTheme = isDarkTheme,
-                        onToggleTheme = onToggleTheme,
-                        onAnalyze = { emailText ->
-                            viewModel.classifyEmail(emailText)
-                        },
-                        onReset = {
-                            viewModel.resetPredictionState()
-                        }
+                        onToggleTheme = onToggleTheme
                     )
                     Screen.History -> HistoryScreen(
                         records = historyList,
@@ -160,295 +154,279 @@ fun SpamShieldApp(
 // ==========================================
 @Composable
 fun AnalyzeScreen(
-    predictState: PredictUiState,
+    viewModel: SpamViewModel,
     isDarkTheme: Boolean,
-    onToggleTheme: () -> Unit,
-    onAnalyze: (String) -> Unit,
-    onReset: () -> Unit
+    onToggleTheme: () -> Unit
 ) {
-    var emailInput by remember { mutableStateOf("") }
+    val predictState by viewModel.predictUiState.collectAsStateWithLifecycle()
+    val metricState by viewModel.metricUiState.collectAsStateWithLifecycle()
+    val emailInput by viewModel.emailInput.collectAsStateWithLifecycle()
+    val isLoadingSample by viewModel.isLoadingSample.collectAsStateWithLifecycle()
+
     val focusManager = LocalFocusManager.current
-    val clipboardManager = LocalClipboardManager.current
-    val context = LocalContext.current
+
+    val surfaceColor = if (isDarkTheme) Color(0xFF111827) else MaterialTheme.colorScheme.surface
+    val borderColor = if (isDarkTheme) Color(0xFF374151) else MaterialTheme.colorScheme.onSurface.copy(alpha=0.2f)
+    val textColorSecondary = if (isDarkTheme) Color(0xFF9ca3af) else MaterialTheme.colorScheme.onSurfaceVariant
+    val textColorPrimary = if (isDarkTheme) Color(0xFFf3f4f6) else MaterialTheme.colorScheme.onSurface
+    val accentColor = Color(0xFF3b82f6)
+    val accentHover = Color(0xFF2563eb)
+    
+    val resultColor = when {
+        predictState is PredictUiState.Success -> {
+            if ((predictState as PredictUiState.Success).prediction == "spam") Color(0xFFe91e63)
+            else Color(0xFF4caf50)
+        }
+        else -> Color.Transparent
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(20.dp)
+            .padding(16.dp)
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // App Identity Brand Header
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(top = 10.dp, bottom = 24.dp)
+        // App Identity Brand Header (similar to screenshot's Title)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                    modifier = Modifier.align(Alignment.Center)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(
-                                Brush.linearGradient(listOf(ElectricPurple, NeonCyan))
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Shield,
-                            contentDescription = "Shield Logo",
-                            tint = Color.White,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = "SpamShield",
-                        style = MaterialTheme.typography.headlineMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.SansSerif,
-                            letterSpacing = 0.5.sp
-                        ),
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                }
-
-                // Dark / Light Mode Toggle icon button
-                IconButton(
-                    onClick = onToggleTheme,
-                    modifier = Modifier.align(Alignment.CenterEnd)
-                ) {
-                    Icon(
-                        imageVector = if (isDarkTheme) Icons.Rounded.LightMode else Icons.Rounded.DarkMode,
-                        contentDescription = "Toggle Theme",
-                        tint = MaterialTheme.colorScheme.onBackground
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "DEEP LEARNING AI V2.0",
-                style = MaterialTheme.typography.bodySmall.copy(
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 2.sp
-                ),
-                color = NeonCyan
+                text = "FINAL YEAR PROJECT (CMP 499)",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = textColorPrimary)
             )
+            IconButton(onClick = onToggleTheme) {
+                Icon(
+                    imageVector = if (isDarkTheme) Icons.Rounded.LightMode else Icons.Rounded.DarkMode,
+                    contentDescription = "Toggle Theme",
+                    tint = textColorPrimary
+                )
+            }
         }
+        
+        Spacer(modifier = Modifier.height(16.dp))
 
-        // Conditionally render input area and actions or result page
-        AnimatedContent(
-            targetState = predictState,
-            transitionSpec = {
-                slideInVertically { height -> height } + fadeIn() togetherWith
-                        slideOutVertically { height -> -height } + fadeOut()
-            },
-            label = "StateTransition"
-        ) { state ->
-            when (state) {
-                is PredictUiState.Idle, is PredictUiState.Error -> {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        if (state is PredictUiState.Error) {
-                            GlassCard(
-                                borderColor = SpamRed.copy(alpha = 0.5f),
-                                backgroundColor = DarkSurfaceVariant,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(bottom = 16.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(12.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Warning,
-                                        contentDescription = "Error icon",
-                                        tint = SpamRed,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Text(
-                                        text = state.message,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = SpamRedGlow
-                                    )
-                                }
-                            }
-                        }
+        // Email Content Input Setup
+        Column(modifier = Modifier.fillMaxWidth()) {
+            OutlinedTextField(
+                value = emailInput,
+                onValueChange = { viewModel.onEmailInputChanged(it) },
+                placeholder = { 
+                    Text("Paste the email content here...", color = textColorSecondary)
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp),
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = surfaceColor,
+                    unfocusedContainerColor = surfaceColor,
+                    disabledContainerColor = surfaceColor,
+                    focusedIndicatorColor = accentColor,
+                    unfocusedIndicatorColor = borderColor,
+                    focusedTextColor = textColorPrimary,
+                    unfocusedTextColor = textColorPrimary
+                ),
+                shape = RoundedCornerShape(12.dp)
+            )
+            
+            Spacer(modifier = Modifier.height(16.dp))
 
-                        // Input Box Header with Clipboard functionality
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Email Content",
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                            
-                            // Paste pill button
-                            Card(
-                                shape = RoundedCornerShape(50.dp),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                                border = BorderStroke(1.dp, TextMuted.copy(alpha = 0.3f)),
-                                modifier = Modifier
-                                    .clickable {
-                                        val pasteText = clipboardManager.getText()?.text
-                                        if (!pasteText.isNullOrEmpty()) {
-                                            emailInput = pasteText
-                                            Toast.makeText(context, "Pasted text from clipboard", Toast.LENGTH_SHORT).show()
-                                        } else {
-                                            Toast.makeText(context, "Clipboard is empty!", Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                    .testTag("paste_button")
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.ContentPaste,
-                                        contentDescription = "Paste Icon",
-                                        tint = NeonCyan,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = "Paste From Clipboard",
-                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                        color = NeonCyan
-                                    )
-                                }
-                            }
-                        }
-
-                        // Glassmorphic Input Text Area with Ambient Glow Backdrop
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp)
-                        ) {
-                            // Glowing soft background backdrop (asymmetry glow feel)
-                            Box(
-                                modifier = Modifier
-                                    .matchParentSize()
-                                    .padding(4.dp)
-                                    .offset(y = 2.dp)
-                                    .clip(RoundedCornerShape(32.dp))
-                                    .background(
-                                        Brush.linearGradient(
-                                            colors = listOf(
-                                                ElectricPurple.copy(alpha = 0.12f),
-                                                NeonCyan.copy(alpha = 0.12f)
-                                            )
-                                        )
-                                    )
-                            )
-
-                            GlassCard(
-                                borderColor = if (isDarkTheme) Color.White.copy(alpha = 0.1f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
-                                backgroundColor = if (isDarkTheme) Color(0xCC1A1A1A) else MaterialTheme.colorScheme.surface,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                TextField(
-                                    value = emailInput,
-                                    onValueChange = { emailInput = it },
-                                    placeholder = {
-                                        Text(
-                                            text = "Paste header details or email body context to evaluate threat potential...",
-                                            color = TextMuted,
-                                            style = MaterialTheme.typography.bodyMedium
-                                        )
-                                    },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(230.dp)
-                                        .testTag("email_input_field"),
-                                    colors = TextFieldDefaults.colors(
-                                        focusedContainerColor = Color.Transparent,
-                                        unfocusedContainerColor = Color.Transparent,
-                                        disabledContainerColor = Color.Transparent,
-                                        focusedIndicatorColor = Color.Transparent,
-                                        unfocusedIndicatorColor = Color.Transparent,
-                                        cursorColor = ElectricPurple,
-                                        focusedTextColor = MaterialTheme.colorScheme.onBackground,
-                                        unfocusedTextColor = MaterialTheme.colorScheme.onBackground
-                                    ),
-                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                                    keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
-                                )
-                            }
-                        }
-
-                        // Helper buttons for generating Random Spam and Random Ham
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 12.dp),
-                            horizontalArrangement = Arrangement.SpaceEvenly
-                        ) {
-                            TextButton(onClick = {
-                                emailInput = "URGENT: Your account has been suspended due to suspicious activities. Please verify your identity immediately by clicking the link to restore access and win a $500 Walmart Gift Card."
-                            }) {
-                                Icon(Icons.Rounded.BugReport, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Random Spam", style = MaterialTheme.typography.labelMedium)
-                            }
-                            TextButton(onClick = {
-                                emailInput = "Hi team, Just a quick reminder that our weekly sync is scheduled for tomorrow at 10 AM. Please make sure to update your status reports before the meeting. Thanks, Sarah"
-                            }) {
-                                Icon(Icons.Rounded.CheckCircleOutline, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Random Ham", style = MaterialTheme.typography.labelMedium)
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Large Action Call Button with search icon
-                        GradientButton(
-                            text = "Analyze Email",
-                            icon = Icons.Rounded.Search,
-                            onClick = {
-                                focusManager.clearFocus()
-                                onAnalyze(emailInput)
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(56.dp)
-                                .testTag("analyze_button")
-                        )
-                    }
+            // Check Button
+            Button(
+                onClick = { 
+                    focusManager.clearFocus()
+                    viewModel.classifyEmail() 
+                },
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = accentColor)
+            ) {
+                Text("Check", fontWeight = FontWeight.Bold, color = Color.White)
+            }
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // Random Ham / Spam Buttons
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(
+                    onClick = { viewModel.fetchRandomSample("ham") },
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = surfaceColor),
+                    border = BorderStroke(1.dp, borderColor)
+                ) {
+                    Text(if (isLoadingSample) "Loading..." else "Random HAM", fontWeight = FontWeight.Bold, color = textColorPrimary)
                 }
-
-                is PredictUiState.Loading -> {
-                    NetworkLoaderWidget()
-                }
-
-                is PredictUiState.Success -> {
-                    VerdictDisplayWidget(
-                        successResult = state,
-                        onReset = {
-                            emailInput = ""
-                            onReset()
-                        }
-                    )
+                
+                Button(
+                    onClick = { viewModel.fetchRandomSample("spam") },
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = surfaceColor),
+                    border = BorderStroke(1.dp, borderColor)
+                ) {
+                    Text(if (isLoadingSample) "Loading..." else "Random SPAM", fontWeight = FontWeight.Bold, color = textColorPrimary)
                 }
             }
         }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Prediction Result Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = surfaceColor),
+            border = BorderStroke(1.dp, borderColor)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("PREDICTION RESULT", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Black, letterSpacing = 1.sp), color = textColorSecondary)
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                when (predictState) {
+                    is PredictUiState.Success -> {
+                        val state = predictState as PredictUiState.Success
+                        val verdict = state.prediction.uppercase()
+                        val conf = String.format("%.2f", state.confidence)
+                        
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Result: ", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = textColorPrimary))
+                            Text("$verdict — $conf% confidence", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = resultColor))
+                        }
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        LinearProgressIndicator(
+                            progress = { (state.confidence / 100.0).toFloat() },
+                            color = resultColor,
+                            trackColor = borderColor.copy(alpha = 0.5f),
+                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp))
+                        )
+                    }
+                    is PredictUiState.Loading -> {
+                        Text("Result: Loading...", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = textColorPrimary))
+                    }
+                    is PredictUiState.Error -> {
+                        Text("Result: Error (${(predictState as PredictUiState.Error).message})", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = Color(0xFFe91e63)))
+                    }
+                    else -> {
+                        Text("Result: —", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = textColorPrimary))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LinearProgressIndicator(
+                            progress = { 0f },
+                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                            color = borderColor, trackColor = borderColor.copy(alpha = 0.5f)
+                        )
+                    }
+                }
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(24.dp))
+        Divider(color = borderColor, thickness = 1.dp)
+        Spacer(modifier = Modifier.height(24.dp))
+        
+        // Model Evaluation Metrics
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Text("MODEL EVALUATION METRICS", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Black, letterSpacing = 1.sp), color = textColorSecondary)
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(
+                    onClick = { viewModel.fetchMetric("accuracy") },
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = surfaceColor),
+                    border = BorderStroke(1.dp, borderColor)
+                ) { Text("Accuracy", fontWeight = FontWeight.Bold, color = textColorPrimary) }
+                
+                Button(
+                    onClick = { viewModel.fetchMetric("precision") },
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = surfaceColor),
+                    border = BorderStroke(1.dp, borderColor)
+                ) { Text("Precision", fontWeight = FontWeight.Bold, color = textColorPrimary) }
+            }
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(
+                    onClick = { viewModel.fetchMetric("recall") },
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = surfaceColor),
+                    border = BorderStroke(1.dp, borderColor)
+                ) { Text("Recall", fontWeight = FontWeight.Bold, color = textColorPrimary) }
+                
+                Button(
+                    onClick = { viewModel.fetchMetric("f1") },
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = surfaceColor),
+                    border = BorderStroke(1.dp, borderColor)
+                ) { Text("F1-Score", fontWeight = FontWeight.Bold, color = textColorPrimary) }
+            }
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            Button(
+                onClick = { viewModel.fetchMetric("roc_auc") },
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = surfaceColor),
+                border = BorderStroke(1.dp, borderColor)
+            ) { Text("ROC-AUC", fontWeight = FontWeight.Bold, color = textColorPrimary) }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+        
+        // Metric Result Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = surfaceColor),
+            border = BorderStroke(1.dp, borderColor)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = if (metricState is MetricUiState.Success) (metricState as MetricUiState.Success).response.metric ?: "METRIC RESULT" else "METRIC RESULT", 
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Black, letterSpacing = 1.sp), 
+                    color = textColorSecondary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                when (metricState) {
+                    is MetricUiState.Idle -> {
+                        Text("Click a metric button above to view its value", style = MaterialTheme.typography.bodyMedium, color = textColorSecondary, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+                    }
+                    is MetricUiState.Loading -> {
+                        Text("Loading...", style = MaterialTheme.typography.bodyMedium, color = textColorSecondary)
+                    }
+                    is MetricUiState.Success -> {
+                        val res = (metricState as MetricUiState.Success).response
+                        val pct = String.format("%.2f%%", (res.value ?: 0.0) * 100.0)
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(res.metric ?: "", style = MaterialTheme.typography.titleMedium, color = textColorPrimary)
+                            Text(pct, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), color = accentColor)
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("Formula: ${res.formula}", style = MaterialTheme.typography.bodySmall, color = textColorSecondary)
+                    }
+                    is MetricUiState.Error -> {
+                        Text((metricState as MetricUiState.Error).message, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFe91e63))
+                    }
+                }
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(120.dp)) // Extra padding for bottom nav
     }
 }
+
 
 // ==========================================
 // 2. DETAILED SHIMMER / CYBERPUNK LOADING COMPONENT
